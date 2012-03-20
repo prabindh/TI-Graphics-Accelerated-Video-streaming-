@@ -47,15 +47,11 @@
 #include <linux/fb.h>
 #include <pthread.h>
 
+#include "vertex-info.h"
 
 /******************************************************************************
 Globals
 ******************************************************************************/
-
-static int init_view();
-static void release_view();
-static int setScene();
-
 int fd_bcsink_fifo_rec;
 int fd_bcinit_fifo_rec;
 int fd_bcack_fifo_rec;
@@ -64,11 +60,7 @@ bc_gstpacket bcbuf_receive, bcbuf;
 
 TISGXStreamTexIMGSTREAM* texClass;
 TISGXStreamIMGSTREAMDevice* deviceClass;
-imgstream_device_attributes initAttrib = {inTextureWidth, inTextureHeight, 2,
-inTextureWidth*inTextureHeight*2,
-PVRSRV_PIXEL_FORMAT_UYVY,
-2 //2 //2 buffers used
-};
+imgstream_device_attributes initAttrib;
 int lastDeviceClass = 0;
 
 unsigned long *paArray;
@@ -78,7 +70,13 @@ int physicalAddress;
 
 extern void deInitEGL();
 extern int initEGL(int *surf_w, int *surf_h, int profile);
+void mem_cmem_init();
+int mem_cmem_alloc(int numBytes, void**virtualAddress, int* physicalAddress);
+int mem_cmem_free(void* virtualAddress);
+void mem_cmem_deinit();
 
+
+// Primary function that sets up v3dfx-base
 int init_view()
 {
 	int matrixLocation;
@@ -97,18 +95,14 @@ int init_view()
 	return 1;
 }
 
-/*!****************************************************************************
- @Function		release_view
-******************************************************************************/
+// Destroys the v3dfx-base classes
 void release_view()
 {	
 	// Frees the OpenGL handles for the program and the 2 shaders
 	deviceClass->destroy();
 }
 
-/*!****************************************************************************
- @Function		set mvp matrix - fixed value in this case
-******************************************************************************/
+//Helper functions
 int set_mvp(int location)
 {
 	int m_fAngle = 0;
@@ -132,115 +126,7 @@ int set_mvp(int location)
 	return 1;
 }
 
-/******************************************************************************
-******************************************************************************/
-
-/* Vertices for rectangle covering the entire display resolution - this is for example only.
-Any layout is possible */
-
-GLfloat rect_vertices[6][3] =
-{   // x     y     z
- 
-   /* 1st Traingle */
-    {-1.0,  1.0,  0.0}, // 0 
-    {-1.0, -1.0,  0.0}, // 1
-    { 1.0,  1.0,  0.0}, // 2
-  
-   /* 2nd Traingle */
-    { 1.0,  1.0,  0.0}, // 1
-    {-1.0, -1.0,  0.0}, // 0
-    { 1.0, -1.0,  0.0}, // 2
-};
-
-GLfloat rect_vertices0[6][3] =
-{   // x     y     z
- 
-   /* 1st Traingle */
-    {-1.0,  1.0,  0.0}, // 0 
-    {-1.0,  0.0,  0.0}, // 1
-    { 0.0,  1.0,  0.0}, // 2
-  
-   /* 2nd Traingle */
-    { 0.0,  1.0,  0.0}, // 1
-    {-1.0, -0.0,  0.0}, // 0
-    { 0.0, -0.0,  0.0}, // 2
-};
-
-GLfloat rect_vertices1[6][3] =
-{   // x     y     z
- 
-   /* 1st Traingle */
-    {-0.0,  1.0,  0.0}, // 0 
-    {-0.0, -0.0,  0.0}, // 1
-    { 1.0,  1.0,  0.0}, // 2
-  
-   /* 2nd Traingle */
-    { 1.0,  1.0,  0.0}, // 1
-    {-0.0, -0.0,  0.0}, // 0
-    { 1.0, -0.0,  0.0}, // 2
-};
-
-GLfloat rect_vertices2[6][3] =
-{   // x     y     z
- 
-   /* 1st Traingle */
-    {-1.0,  0.0,  0.0}, // 0 
-    {-1.0, -1.0,  0.0}, // 1
-    { 0.0,  0.0,  0.0}, // 2
-  
-   /* 2nd Traingle */
-    { 0.0,  0.0,  0.0}, // 1
-    {-1.0, -1.0,  0.0}, // 0
-    { 0.0, -1.0,  0.0}, // 2
-};
-
-GLfloat rect_vertices3[6][3] =
-{   // x     y     z
- 
-   /* 1st Traingle */
-    {-0.0,  0.0,  0.0}, // 0 
-    {-0.0, -1.0,  0.0}, // 1
-    { 1.0,  0.0,  0.0}, // 2
-  
-   /* 2nd Traingle */
-    { 1.0,  0.0,  0.0}, // 1
-    {-0.0, -1.0,  0.0}, // 0
-    { 1.0, -1.0,  0.0}, // 2
-};
-
-/* Texture Co-ordinates */
-GLfloat rect_texcoord[6][2] =
-{   // x     y     z  alpha
-
-   /* 1st Traingle */
-    { 0.0, 0.0},
-    { 0.0, 1.0},
-    { 1.0, 0.0},
-
-   /* 2nd Traingle */
-    { 1.0,  0.0}, 
-    { 0.0,  1.0},
-    { 1.0,  1.0},
-
-};
-
-/* Texture Co-ordinates */
-GLfloat rect_texcoord1[6][2] =
-{   // x     y     z  alpha
-
-   /* 1st Traingle */
-    { 0.0, 0.0},
-    { 0.0, 1.0},
-    { 1.0, 1.0},
-
-   /* 2nd Traingle */
-    { 1.0,  0.0}, 
-    { 0.0,  1.0},
-    { 1.0,  1.0},
-
-};
-
-/* Draws rectangiular quads */
+//Draws rectangiular quads
 void drawRect(int isfullscreen)
 {
     glEnableVertexAttribArray(0);
@@ -281,7 +167,7 @@ void drawRect(int isfullscreen)
 }
 
 
-/* Render video on the triangles */
+//Render video on the triangles
 void render(int buf_index)
 {
     GLuint tex_obj;
@@ -308,10 +194,8 @@ void render(int buf_index)
 	}
 }
 
-/******************************
-* Main function with event loop
-********************************/
 
+// Main function with event loop
 int main(void)
 {
 	int n = -1;
@@ -342,8 +226,6 @@ int main(void)
 	freeArray = (unsigned long*)malloc(initAttrib.numBuffers * sizeof(unsigned long));	
 	if(!paArray || !freeArray) {goto exitCMEMAlloc;}
 
-	/*************************************************************************************
-	**************************************************************************************/
 	for(count = 0; count < initAttrib.numBuffers; count++)
 	{
 		paArray[count]  = physicalAddressBase + count*(chunkSize/initAttrib.numBuffers);
