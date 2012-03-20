@@ -1,6 +1,7 @@
 /*****************************************************************************
- * common.h
- * bc-cat module unit test - common header
+ * v3dfx-pipe-renderer.h
+ * v3dfx-base renderer with a pipe interface and draws to a NULL window 
+ * system  - header file
  *
  * Copyright (C) 2012 Texas Instruments Incorporated - http://www.ti.com/
  *
@@ -35,23 +36,14 @@
  * Contact: aditya.n@ti.com
  ****************************************************************************/
 
-
-
-#ifndef __COMMON_H__
-#define __COMMON_H__
+#ifndef __V3DFX_PIPE_RENDERER_H__
+#define __V3DFX_PIPE_RENDERER_H__
 
 #include <GLES2/gl2.h>
 #include <EGL/egl.h>
 #include <GLES2/gl2ext.h>
-#include <bc_cat.h>
-
-typedef void (GL_APIENTRYP PFNGLTEXBINDSTREAMIMGPROC) (GLint device, GLint deviceoffset);
-extern PFNGLTEXBINDSTREAMIMGPROC glTexBindStreamIMG;
-#define GL_TEXTURE_STREAM_IMG  0x8C0D
-
-extern EGLDisplay dpy;
-extern EGLSurface surface;
 
 int initEGL(int *surf_w, int *surf_h, int profile);
 void deInitEGL();
-#endif /* __COMMON_H__ */
+
+#endif /* __V3DFX_PIPE_RENDERER_H__*/
