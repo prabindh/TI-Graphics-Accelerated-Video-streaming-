@@ -79,7 +79,7 @@ void deInitEGL()
     eglTerminate(dpy);
 }
 
-int initEGL(int *surf_w, int *surf_h, int profile)
+int initEGL(int profile)
 {
 
     EGLint  context_attr[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
@@ -127,14 +127,8 @@ int initEGL(int *surf_w, int *surf_h, int profile)
     }
 
 	//Use this rather than fb info, as this is generic
-	eglQuerySurface(eglDisplay, eglSurface, EGL_WIDTH, &surf_w);
-	eglQuerySurface(eglDisplay, eglSurface, EGL_HEIGHT, &surf_h);
-
-	
-    if (surf_w && surf_h) {
-        *surf_w = disp_w;
-        *surf_h = disp_h;
-    }
+	eglQuerySurface(dpy, surface, EGL_WIDTH, &disp_w);
+	eglQuerySurface(dpy, surface, EGL_HEIGHT, &disp_h);
 
     context = eglCreateContext(dpy, cfgs[0], EGL_NO_CONTEXT, context_attr);
     

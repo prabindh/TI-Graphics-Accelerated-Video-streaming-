@@ -38,9 +38,18 @@
 #ifndef __PIPE_INTERFACE_H
 #define __PIPE_INTERFACE_H
 
+#include "v3dfx_imgstream.h"
+
 int initPipes(imgstream_device_attributes* initparams);
 int read_pipe();
 int write_pipe();
-int deinit_pipes();
+void deinit_pipes();
+
+//TODO - remove this and use v3dfx-base attributes directly
+typedef struct gstpacket
+{
+	void *buf;
+        int index;
+}bc_gstpacket;
 
 #endif

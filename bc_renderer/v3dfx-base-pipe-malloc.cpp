@@ -34,7 +34,7 @@
  * Primary author: Aditya Nellutla (aditya.n@ti.com)
  * Modified to include v3dfx-base: Prabindh Sundareson (prabu@ti.com)
  ****************************************************************************/
-
+#include "stdio.h"
 #include <cmem.h>
 
 static CMEM_AllocParams cmemParams = { CMEM_POOL, CMEM_NONCACHED, 4096 };
@@ -46,9 +46,6 @@ void mem_cmem_init()
 
 int mem_cmem_alloc(int numBytes, void**virtualAddress, int* physicalAddress)
 {
-	void* virtualAddress; 
-	int physicalAddress;
-
 	//setup CMEM pointers  
 	*virtualAddress = CMEM_alloc(numBytes, &cmemParams);
 	if(!*virtualAddress)

@@ -1,20 +1,19 @@
 .PHONY: all install uninstall clean
 
--include ../gst_plugin/src/rules.make
+-include rules.make
 
 CC = $(CROSS_COMPILE)g++
 CX = $(CROSS_COMPILE)gcc
-INCS     ?= -I../gst_plugin/src \
-            -I$(GSDK_ROOT)/include/OGLES2 \
+INCS     ?= -I$(GSDK_ROOT)/include/OGLES2 \
             -I$(GSDK_ROOT)/include/bufferclass_ti \
+	    -I$(GSDK_ROOT)/GFX_Linux_KM/services4/3rdparty/bufferclass_ti \
+	 	-I$(GSDK_ROOT)/GFX_Linux_KM/include4 \
             -I$(CMEM_DIR)/include \
-	    -I$(GSTREAMER_SRC_DIR)/gstreamer-0.10.30	\
-	    -I$(TGTFS_PATH)/opt/gstreamer/include/glib-2.0 \
-	    -I$(TGTFS_PATH)/opt/gstreamer/lib/glib-2.0/include \
-	    -I$(TGTFS_PATH)/opt/gstreamer/include/gstreamer-0.10
+		-I$(V3DFX_DIR)/api/include
 
-LIB_PATH ?= -L$(GSDK_ROOT)/gfx_rel_es8.x \
-            -Wl,--rpath=$(GSDK_ROOT)/gfx_rel_es8.x \
+
+LIB_PATH ?= -L$(GSDK_ROOT)/gfx_rel_es5.x \
+            -Wl,--rpath=$(GSDK_ROOT)/gfx_rel_es5.x \
 
 INST_DEST    ?= $(TGTFS_PATH)/opt/usbVidStream
 
@@ -26,19 +25,18 @@ LIBS    += -lGLESv2
 CMEM_LIB     ?= $(CMEM_DIR)/lib/cmem.a470MV
 LIBS    += $(CMEM_LIB)
 
-TARGET = bcRenderer 
-
-SOURCES = bc_renderer.c 
-HEADRERS = 
-OBJFILES += $(SOURCES:%.c=%.o)
+TARGET = piper
 
 all:	$(TARGET)
 
-$(TARGET):	$(OBJFILES) 
-	$(CC) $^ -o $@ $(LDFLAGS) $(LIBS)
+TEST_CPP_FILES := $(wildcard *.cpp)
+TEST_OBJ_FILES := $(patsubst %.cpp,%.o,$(TEST_CPP_FILES))
+$(TARGET): $(TEST_OBJ_FILES)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS) \
+	 $(V3DFX_DIR)/api/build/v3dfx-base.a 
 
-$(OBJFILES):	%.o: %.c $(HEADRERS)
-	$(CX) -c $< -o $@ $(CFLAGS)
+%.o: %.cpp
+	$(CC) $(INCS) -c -o $@ $<
 
 install:	$(TARGET)
 	install -m 0755 $^ $(INST_DEST)

@@ -36,9 +36,6 @@
  * Modified to include v3dfx-base: Prabindh Sundareson (prabu@ti.com)
  ****************************************************************************/
 
-
-#include "gst_render_bridge.h"
-
 #include "pipe-interface.h"
 
 // Size of the texture we create
@@ -46,52 +43,62 @@
 #define BCINIT_FIFO_NAME "gstbcinit_fifo"
 #define BCACK_FIFO_NAME "gstbcack_fifo"
 
+int fd_bcsink_fifo_rec;
+int fd_bcinit_fifo_rec;
+int fd_bcack_fifo_rec;
+
+bc_gstpacket bcbuf_receive;
+bc_gstpacket bcbuf;
 
 int initPipes(imgstream_device_attributes* initparams)
 {
 	int n=-1;
-		/*************************************************************************************
-		* Open Named pipes for communication with the gst-bcsink plugin
-		**************************************************************************************/
-		fd_bcinit_fifo_rec = open( BCINIT_FIFO_NAME, O_RDONLY);
-		if(fd_bcinit_fifo_rec < 0)
-		{
-			printf (" Failed to open bcinit_fifo FIFO - fd: %d\n", fd_bcinit_fifo_rec);
-			goto exit;
-		}
+	/*************************************************************************************
+	* Open Named pipes for communication with the gst-bcsink plugin
+	**************************************************************************************/
+	fd_bcinit_fifo_rec = open( BCINIT_FIFO_NAME, O_RDONLY);
+	if(fd_bcinit_fifo_rec < 0)
+	{
+		printf (" Failed to open bcinit_fifo FIFO - fd: %d\n", fd_bcinit_fifo_rec);
+		goto exit1;
+	}
 
-		fd_bcsink_fifo_rec = open( BCSINK_FIFO_NAME, O_RDONLY );
-		if(fd_bcsink_fifo_rec < 0)
-		{
-			printf (" Failed to open bcsink_fifo FIFO - fd: %d\n", fd_bcsink_fifo_rec);
-			goto exit;
-		}
+	fd_bcsink_fifo_rec = open( BCSINK_FIFO_NAME, O_RDONLY );
+	if(fd_bcsink_fifo_rec < 0)
+	{
+		printf (" Failed to open bcsink_fifo FIFO - fd: %d\n", fd_bcsink_fifo_rec);
+		goto exit2;
+	}
 
-		fd_bcack_fifo_rec = open( BCACK_FIFO_NAME, O_WRONLY);
-		if(fd_bcack_fifo_rec < 0)
-		{
-			printf (" Failed to open bcack_fifo FIFO - fd: %d\n", fd_bcack_fifo_rec);
-			goto exit;
-		}
+	fd_bcack_fifo_rec = open( BCACK_FIFO_NAME, O_WRONLY);
+	if(fd_bcack_fifo_rec < 0)
+	{
+		printf (" Failed to open bcack_fifo FIFO - fd: %d\n", fd_bcack_fifo_rec);
+		goto exit3;
+	}
 
-        n = read(fd_bcinit_fifo_rec, initparams, sizeof(imgstream_device_attributes));
+	//n = read(fd_bcinit_fifo_rec, initparams, sizeof(imgstream_device_attributes));
 
-		close(fd_bcinit_fifo_rec);
-		
-		return n;
+	close(fd_bcack_fifo_rec);
+exit3:
+	close(fd_bcsink_fifo_rec);
+exit2:
+	close(fd_bcinit_fifo_rec);
+exit1:	
+	return n;
 }
 
 int read_pipe()
 {
 	int n;
-	n = read(fd_bcsink_fifo_rec, &bcbuf, sizeof(bc_gstpacket));
+	//n = read(fd_bcsink_fifo_rec, &bcbuf, sizeof(bc_gstpacket));
 	return n;
 }
 
 int write_pipe()
 {
 	int n;
-	n = write(fd_bcack_fifo_rec, &bcbuf.buf, sizeof(GstBufferClassBuffer*));
+	//n = write(fd_bcack_fifo_rec, &bcbuf.buf, sizeof(GstBufferClassBuffer*));
 	return n;
 }
 

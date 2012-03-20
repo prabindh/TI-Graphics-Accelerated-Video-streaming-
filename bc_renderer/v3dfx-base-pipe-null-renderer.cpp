@@ -43,20 +43,25 @@
 #include <cmem.h>
 #include <getopt.h>
 #include <math.h>
-#include <gst/gst.h>
-#include <linux/fb.h>
 #include <pthread.h>
+
+#include "pipe-interface.h"
 
 #include "vertex-info.h"
 
 /******************************************************************************
 Globals
 ******************************************************************************/
-int fd_bcsink_fifo_rec;
-int fd_bcinit_fifo_rec;
-int fd_bcack_fifo_rec;
+extern int fd_bcsink_fifo_rec;
+extern int fd_bcinit_fifo_rec;
+extern int fd_bcack_fifo_rec;
 
-bc_gstpacket bcbuf_receive, bcbuf;
+extern bc_gstpacket bcbuf_receive; 
+extern bc_gstpacket bcbuf;
+
+extern EGLDisplay dpy;
+extern EGLSurface surface;
+
 
 TISGXStreamTexIMGSTREAM* texClass;
 TISGXStreamIMGSTREAMDevice* deviceClass;
@@ -69,38 +74,12 @@ void* virtualAddress;
 int physicalAddress;
 
 extern void deInitEGL();
-extern int initEGL(int *surf_w, int *surf_h, int profile);
+extern int initEGL(int profile);
 void mem_cmem_init();
 int mem_cmem_alloc(int numBytes, void**virtualAddress, int* physicalAddress);
 int mem_cmem_free(void* virtualAddress);
 void mem_cmem_deinit();
 
-
-// Primary function that sets up v3dfx-base
-int init_view()
-{
-	int matrixLocation;
-	deviceClass = new TISGXStreamIMGSTREAMDevice();
-	texClass = new TISGXStreamTexIMGSTREAM();
-
-	deviceClass->init(&tempAttrib, lastDeviceClass, paArray);
-	texClass->init(lastDeviceClass);
-	texClass->load_v_shader(NULL);
-	texClass->load_f_shader(NULL);
-	texClass->load_program();	
-
-	matrixLocation = texClass->get_uniform_location("MVPMatrix");
-	set_mvp(matrixLocation);	
-	
-	return 1;
-}
-
-// Destroys the v3dfx-base classes
-void release_view()
-{	
-	// Frees the OpenGL handles for the program and the 2 shaders
-	deviceClass->destroy();
-}
 
 //Helper functions
 int set_mvp(int location)
@@ -125,6 +104,34 @@ int set_mvp(int location)
 	glUniformMatrix4fv(location, 1, GL_FALSE, aPMVMatrix);
 	return 1;
 }
+
+
+// Primary function that sets up v3dfx-base
+int init_view()
+{
+	int matrixLocation;
+	deviceClass = new TISGXStreamIMGSTREAMDevice();
+	texClass = new TISGXStreamTexIMGSTREAM();
+
+	deviceClass->init(&initAttrib, lastDeviceClass, paArray);
+	texClass->init(lastDeviceClass);
+	texClass->load_v_shader(NULL);
+	texClass->load_f_shader(NULL);
+	texClass->load_program();	
+
+	matrixLocation = texClass->get_uniform_location("MVPMatrix");
+	set_mvp(matrixLocation);	
+	
+	return 1;
+}
+
+// Destroys the v3dfx-base classes
+void release_view()
+{	
+	// Frees the OpenGL handles for the program and the 2 shaders
+	deviceClass->destroy();
+}
+
 
 //Draws rectangiular quads
 void drawRect(int isfullscreen)
@@ -202,9 +209,10 @@ int main(void)
 	int count = 0;
 	static bc_buf_ptr_t buf_pa;
 	int dev_fd;
+	unsigned long chunkSize;
 
 	printf("Initializing egl..\n\n");
-	if( 0 == initEGL())
+	if( 0 == initEGL(0)) //No profiling
 	{	
 		printf("EGL init failed");
 		goto exitNone;
@@ -213,14 +221,15 @@ int main(void)
 	//Also initialise the pipes
 	n = initPipes(&initAttrib);
 	if(n) 	{ 		goto exitPipes; 	}
-	
-	if(mem_cmem_init()) {	goto exitPipes;	}
+
+	//Initialise CMEM allocator - TODO check err status
+	mem_cmem_init();
 	//Allocate mem
 	chunkSize = initAttrib.widthPixels* 
 							initAttrib.heightPixels* 
 							initAttrib.bytesPerPixel*  
 							initAttrib.numBuffers;
-	if(mem_cmem_alloc( chunkSize, &virtualAddress, physicalAddress )) {goto exitCMEMInit;}
+	if(mem_cmem_alloc( chunkSize, &virtualAddress, &physicalAddress )) {goto exitCMEMInit;}
 
 	paArray = (unsigned long*)malloc(initAttrib.numBuffers * sizeof(unsigned long));
 	freeArray = (unsigned long*)malloc(initAttrib.numBuffers * sizeof(unsigned long));	
@@ -228,7 +237,7 @@ int main(void)
 
 	for(count = 0; count < initAttrib.numBuffers; count++)
 	{
-		paArray[count]  = physicalAddressBase + count*(chunkSize/initAttrib.numBuffers);
+		paArray[count]  = physicalAddress + count*(chunkSize/initAttrib.numBuffers);
 		freeArray[count] = 0;
 	}
 	//TODO - give the allocated buffers back to requestor via answer
@@ -242,7 +251,8 @@ int main(void)
 	{
 		render(bcbuf.index);
 		
-		if( write_pipe() != sizeof(GstBufferClassBuffer *))
+		//TODO - clean up message passing
+		//if( write_pipe() != sizeof(GstBufferClassBuffer *))
 		{	
 			printf("Error Writing into Init Queue\n");
 			//TODO - try again n times ?
