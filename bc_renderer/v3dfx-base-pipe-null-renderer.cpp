@@ -47,7 +47,6 @@
 #include <linux/fb.h>
 #include <pthread.h>
 
-#include "v3dfx-base-pipe-renderer.h"
 
 /******************************************************************************
 Globals
@@ -77,128 +76,8 @@ unsigned long *freeArray;
 void* virtualAddress; 
 int physicalAddress;
 
-EGLDisplay dpy;
-EGLSurface surface = EGL_NO_SURFACE;
-static EGLContext context = EGL_NO_CONTEXT;
-
-static void dump_egl_error(char *name)
-{
-    char *err_str[] = {
-          "EGL_SUCCESS",
-          "EGL_NOT_INITIALIZED",
-          "EGL_BAD_ACCESS",
-          "EGL_BAD_ALLOC",
-          "EGL_BAD_ATTRIBUTE",    
-          "EGL_BAD_CONFIG",
-          "EGL_BAD_CONTEXT",   
-          "EGL_BAD_CURRENT_SURFACE",
-          "EGL_BAD_DISPLAY",
-          "EGL_BAD_MATCH",
-          "EGL_BAD_NATIVE_PIXMAP",
-          "EGL_BAD_NATIVE_WINDOW",
-          "EGL_BAD_PARAMETER",
-          "EGL_BAD_SURFACE" };
-
-    EGLint ecode = eglGetError();
-
-    printf("'%s': egl error '%s' (0x%x)\n",
-           name, err_str[ecode-EGL_SUCCESS], ecode);
-}
-
-void deInitEGL()
-{
-
-    eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    if (context != EGL_NO_CONTEXT)
-        eglDestroyContext(dpy, context);
-    if (surface != EGL_NO_SURFACE)
-        eglDestroySurface(dpy, surface);
-    eglTerminate(dpy);
-}
-
-int initEGL(int *surf_w, int *surf_h, int profile)
-{
-
-    EGLint  context_attr[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
-
-    EGLint            disp_w, disp_h;
-    EGLNativeDisplayType disp_type;
-    EGLNativeWindowType  window;
-    EGLConfig         cfgs[2];
-    EGLint            n_cfgs;
-    EGLint            egl_attr[] = {
-                         EGL_BUFFER_SIZE, EGL_DONT_CARE,
-                         EGL_RED_SIZE,    8,
-                         EGL_GREEN_SIZE,  8,
-                         EGL_BLUE_SIZE,   8,
-                         EGL_DEPTH_SIZE,  8,
-
-                         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-  
-                         EGL_NONE };
-
-    disp_type = (EGLNativeDisplayType)EGL_DEFAULT_DISPLAY;
-    window  = 0;
-
-    dpy = eglGetDisplay(disp_type);
-
-    if (eglInitialize(dpy, NULL, NULL) != EGL_TRUE) {
-        dump_egl_error("eglInitialize");
-        return -1;
-    }
-
-    if (eglGetConfigs(dpy, cfgs, 2, &n_cfgs) != EGL_TRUE) {
-        dump_egl_error("eglGetConfigs");
-        goto cleanup;
-    }
-    
-    if (eglChooseConfig(dpy, egl_attr, cfgs, 2, &n_cfgs) != EGL_TRUE) {
-        dump_egl_error("eglChooseConfig");
-        goto cleanup;
-    }
-
-    surface = eglCreateWindowSurface(dpy, cfgs[0], window, NULL);
-    if (surface == EGL_NO_SURFACE) {
-        dump_egl_error("eglCreateWindowSurface");
-        goto cleanup;
-    }
-
-	//Use this rather than fb info, as this is generic
-	eglQuerySurface(eglDisplay, eglSurface, EGL_WIDTH, &surf_w);
-	eglQuerySurface(eglDisplay, eglSurface, EGL_HEIGHT, &surf_h);
-
-	
-    if (surf_w && surf_h) {
-        *surf_w = disp_w;
-        *surf_h = disp_h;
-    }
-
-    context = eglCreateContext(dpy, cfgs[0], EGL_NO_CONTEXT, context_attr);
-    
-    if (context == EGL_NO_CONTEXT) {
-		//TODO - try with 16bpp configuration, then only exit
-        dump_egl_error("eglCreateContext");
-        goto cleanup;
-    }
-
-    if (eglMakeCurrent(dpy, surface, surface, context) != EGL_TRUE) {
-        dump_egl_error("eglMakeCurrent");
-        goto cleanup;
-    }
-
-    /* do not sync with video frame if profile enabled */
-    if (profile == 1) {
-        if (eglSwapInterval(dpy, 0) != EGL_TRUE) {
-            dump_egl_error("eglSwapInterval");
-            goto cleanup;
-        }
-    }
-    return 0;
-
-cleanup:
-    deInitEGL();
-    return -1;
-}
+extern void deInitEGL();
+extern int initEGL(int *surf_w, int *surf_h, int profile);
 
 int init_view()
 {
@@ -222,9 +101,7 @@ int init_view()
  @Function		release_view
 ******************************************************************************/
 void release_view()
-{
-	deInitEGL();
-	
+{	
 	// Frees the OpenGL handles for the program and the 2 shaders
 	deviceClass->destroy();
 }
@@ -258,7 +135,9 @@ int set_mvp(int location)
 /******************************************************************************
 ******************************************************************************/
 
-/* Vertices for rectagle covering the entire display resolution */
+/* Vertices for rectangle covering the entire display resolution - this is for example only.
+Any layout is possible */
+
 GLfloat rect_vertices[6][3] =
 {   // x     y     z
  
@@ -401,6 +280,8 @@ void drawRect(int isfullscreen)
 
 }
 
+
+/* Render video on the triangles */
 void render(int buf_index)
 {
     GLuint tex_obj;
@@ -427,6 +308,10 @@ void render(int buf_index)
 	}
 }
 
+/******************************
+* Main function with event loop
+********************************/
+
 int main(void)
 {
 	int n = -1;
@@ -438,7 +323,7 @@ int main(void)
 	if( 0 == initEGL())
 	{	
 		printf("EGL init failed");
-		goto exitEGL;
+		goto exitNone;
 	}
 	
 	//Also initialise the pipes
@@ -451,24 +336,26 @@ int main(void)
 							initAttrib.heightPixels* 
 							initAttrib.bytesPerPixel*  
 							initAttrib.numBuffers;
-	if(mem_cmem_alloc( chunkSize, &virtualAddress, physicalAddress )) {goto exitPipes;}
+	if(mem_cmem_alloc( chunkSize, &virtualAddress, physicalAddress )) {goto exitCMEMInit;}
 
 	paArray = (unsigned long*)malloc(initAttrib.numBuffers * sizeof(unsigned long));
 	freeArray = (unsigned long*)malloc(initAttrib.numBuffers * sizeof(unsigned long));	
-	if(!paArray || !freeArray) {goto exitPipes;}
+	if(!paArray || !freeArray) {goto exitCMEMAlloc;}
 
 	/*************************************************************************************
 	**************************************************************************************/
 	for(count = 0; count < initAttrib.numBuffers; count++)
 	{
-		paArray[count]  = physicalAddressBase + chunkSize;
+		paArray[count]  = physicalAddressBase + count*(chunkSize/initAttrib.numBuffers);
 		freeArray[count] = 0;
 	}
-	//TODO - give the buffers back to requestor via answer
+	//TODO - give the allocated buffers back to requestor via answer
 	//write_init_buffer_pipe();
 	
 	init_view();
 
+	//Loop reading new data and rendering, till something happens
+	//TODO - exit cleanly using last msg
 	while(read_pipe() != -1)
 	{
 		render(bcbuf.index);
@@ -480,13 +367,17 @@ int main(void)
 			break;
 		}
 	}
-
-exitCMEM:
-	mem_cmem_free( virtualAddress);
 exit:
 	release_view();
+	deInitEGL();
+exitCMEMAlloc:
+	mem_cmem_free( virtualAddress);
 exitPipes:	
-	deinit_pipes();	
-exitEGL:
+	if(paArray) free(paArray);
+	if(freeArray) free(freeArray);
+	deinit_pipes();
+exitCMEMInit:
+	mem_cmem_deinit();
+exitNone:
 	return 0;
 }
