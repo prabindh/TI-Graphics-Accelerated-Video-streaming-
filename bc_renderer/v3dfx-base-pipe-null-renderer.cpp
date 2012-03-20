@@ -50,7 +50,7 @@
 #include "v3dfx-base-pipe-renderer.h"
 
 /******************************************************************************
- Defines
+Globals
 ******************************************************************************/
 
 static int init_view();
@@ -60,6 +60,22 @@ static int setScene();
 int fd_bcsink_fifo_rec;
 int fd_bcinit_fifo_rec;
 int fd_bcack_fifo_rec;
+
+bc_gstpacket bcbuf_receive, bcbuf;
+
+TISGXStreamTexIMGSTREAM* texClass;
+TISGXStreamIMGSTREAMDevice* deviceClass;
+imgstream_device_attributes initAttrib = {inTextureWidth, inTextureHeight, 2,
+inTextureWidth*inTextureHeight*2,
+PVRSRV_PIXEL_FORMAT_UYVY,
+2 //2 //2 buffers used
+};
+int lastDeviceClass = 0;
+
+unsigned long *paArray;
+unsigned long *freeArray; 
+void* virtualAddress; 
+int physicalAddress;
 
 EGLDisplay dpy;
 EGLSurface surface = EGL_NO_SURFACE;
@@ -183,20 +199,6 @@ cleanup:
     deInitEGL();
     return -1;
 }
-
-bc_gstpacket bcbuf_receive, bcbuf;
-
-TISGXStreamTexIMGSTREAM* texClass;
-TISGXStreamIMGSTREAMDevice* deviceClass;
-imgstream_device_attributes initAttrib = {inTextureWidth, inTextureHeight, 2,
-inTextureWidth*inTextureHeight*2,
-PVRSRV_PIXEL_FORMAT_UYVY,
-2 //2 //2 buffers used
-};
-int lastDeviceClass = 0;
-
-unsigned long *paArray;
-unsigned long *freeArray; 
 
 int init_view()
 {
@@ -449,7 +451,8 @@ int main(void)
 							initAttrib.heightPixels* 
 							initAttrib.bytesPerPixel*  
 							initAttrib.numBuffers;
-	physicalAddressBase = mem_cmem_alloc(	chunkSize 	);
+	if(mem_cmem_alloc( chunkSize, &virtualAddress, physicalAddress )) {goto exitPipes;}
+
 	paArray = (unsigned long*)malloc(initAttrib.numBuffers * sizeof(unsigned long));
 	freeArray = (unsigned long*)malloc(initAttrib.numBuffers * sizeof(unsigned long));	
 	if(!paArray || !freeArray) {goto exitPipes;}
@@ -473,10 +476,13 @@ int main(void)
 		if( write_pipe() != sizeof(GstBufferClassBuffer *))
 		{	
 			printf("Error Writing into Init Queue\n");
-			goto exit;
+			//TODO - try again n times ?
+			break;
 		}
 	}
 
+exitCMEM:
+	mem_cmem_free( virtualAddress);
 exit:
 	release_view();
 exitPipes:	
